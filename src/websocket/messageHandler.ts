@@ -33,6 +33,7 @@ const handleEmitterEvents = (
 ) => {
   emitter.on("data", (data) => {
     const parsedData = JSON.parse(data);
+
     if (parsedData.type === "response") {
       ws.send(
         JSON.stringify({
@@ -56,7 +57,7 @@ const handleEmitterEvents = (
   });
   emitter.on("error", (data) => {
     const parsedData = JSON.parse(data);
-    ws.send(JSON.stringify({ type: "error", data: parsedData.data }));
+    ws.send(JSON.stringify({ type: "error", data: parsedData.dat, key: 'CHAIN_ERROR' }));
   });
 };
 
@@ -76,7 +77,7 @@ export const handleMessage = async (
 
     if (!parsedMessage.content) {
       return ws.send(
-        JSON.stringify({ type: "error", data: "Invaild message format" }),
+        JSON.stringify({ type: "error", data: "Invaild message format", key: 'INVALID_MESSAGE_FORMAT' }),
       );
     }
      
@@ -102,7 +103,7 @@ export const handleMessage = async (
       const handler = searchHandlers[parsedMessage.focusMode];
       console.log("handler: ", handler);
       if (handler) {
-        const emitter = await handler(
+        const emitter = handler(
           parsedMessage.content,
           history,
           llm,
@@ -111,11 +112,11 @@ export const handleMessage = async (
         console.log("emitter: ", emitter);
         handleEmitterEvents(emitter, ws, id);
       } else {
-        ws.send(JSON.stringify({ type: "error", data: "Invalid focus mode" }));
+        ws.send(JSON.stringify({ type: "error", data: "Invalid focus mode",  key: 'INVALID_FOCUS_MODE', }));
       }
     }
   } catch (error) {
     console.error("Failed to handle message", error);
-    ws.send(JSON.stringify({ type: "error", data: "Invalid message format" }));
+    ws.send(JSON.stringify({ type: "error", data: "Invalid message format", key: 'INVALID_MESSAGE_FORMAT' }));
   }
 };
