@@ -9,14 +9,19 @@ import handleWolframAlphaSearch from "../controllers/wolframAlphaSearchControlle
 import handleYoutubeSearch from "../controllers/youtubeSearchController";
 import handleRedditSearch from "../controllers/redditSearchController";
 import handleAcademiceSearch from "../controllers/academicSearchController";
-
+import crypto from 'crypto';
 type Message = {
-  type: string;
+  messageId: string;
+  chatId: string;
   content: string;
-  copilot: boolean;
+};
+
+type WsMessage = {
+  message: Message;
+  type: string;
   focusMode: string;
   history: Array<[string, string]>;
-};
+}
 
 const searchHandlers = {
   academicSearch: handleAcademiceSearch,
@@ -29,8 +34,12 @@ const searchHandlers = {
 const handleEmitterEvents = (
   emitter: EventEmitter,
   ws: WebSocket,
-  id: string,
+  messageId: string,
+  chatId: string,
 ) => {
+  let recievedMessage = '';
+  let sources = [];
+
   emitter.on("data", (data) => {
     const parsedData = JSON.parse(data);
 
@@ -39,21 +48,23 @@ const handleEmitterEvents = (
         JSON.stringify({
           type: "message",
           data: parsedData.data,
-          messageId: id,
+          messageId: messageId,
         }),
       );
+      recievedMessage += parsedData.data
     } else if (parsedData.type === "sources") {
       ws.send(
         JSON.stringify({
           type: "sources",
           data: parsedData.data,
-          messageId: id,
+          messageId: messageId,
         }),
       );
+      sources = parsedData.data;
     }
   });
   emitter.on("end", () => {
-    ws.send(JSON.stringify({ type: "messageEnd", messageId: id }));
+    ws.send(JSON.stringify({ type: "messageEnd", messageId: messageId }));
   });
   emitter.on("error", (data) => {
     const parsedData = JSON.parse(data);
@@ -68,9 +79,10 @@ export const handleMessage = async (
   embeddings: Embeddings,
 ) => {
   try {
-    const parsedMessage = JSON.parse(message) as Message;
+    const parsedWsMessage = JSON.parse(message) as WsMessage;
+    const parsedMessage = parsedWsMessage.message;
     console.log("parsedMessage:", parsedMessage);
-    const id = Math.random().toString(36).substring(7);
+    const id = crypto.randomBytes(7).toString('hex');
 
     // new added for test
     console.log(parsedMessage.content);
@@ -82,11 +94,11 @@ export const handleMessage = async (
     }
      
     // new added for test
-    parsedMessage.history.map((msg) => {
-      console.log(msg[0],msg[1]);
-    })
+    // parsedMessage.history.map((msg) => {
+    //   console.log(msg[0],msg[1]);
+    // })
 
-    const history: BaseMessage[] = parsedMessage.history.map((msg) => {
+    const history: BaseMessage[] = parsedWsMessage.history.map((msg) => {
       if (msg[0] === "human") {
         return new HumanMessage({
           content: msg[1],
@@ -98,9 +110,9 @@ export const handleMessage = async (
       }
     });
 
-    if (parsedMessage.type === "message") {
-      console.log(parsedMessage.focusMode);
-      const handler = searchHandlers[parsedMessage.focusMode];
+    if (parsedWsMessage.type === "message") {
+      console.log(parsedWsMessage.focusMode);
+      const handler = searchHandlers[parsedWsMessage.focusMode];
       console.log("handler: ", handler);
       if (handler) {
         const emitter = handler(
@@ -110,7 +122,7 @@ export const handleMessage = async (
           embeddings,
         );
         console.log("emitter: ", emitter);
-        handleEmitterEvents(emitter, ws, id);
+        handleEmitterEvents(emitter, ws, id, parsedMessage.chatId);
       } else {
         ws.send(JSON.stringify({ type: "error", data: "Invalid focus mode",  key: 'INVALID_FOCUS_MODE', }));
       }
